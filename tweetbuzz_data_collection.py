@@ -4,17 +4,19 @@ import time
 from datetime import datetime
 import json
 import asyncio
-import cardano_cli  # Placeholder for Cardano wallet interaction (use pycardano or similar)
+import subprocess
+from pycardano import Network, Address, TransactionBuilder, TransactionOutput, PlutusV2Script
 
-# X API credentials (replace with actual keys)
+# X API credentials
 API_KEY = "LxIeablWHgxpCEiDUOf6g2pkG"
 API_SECRET = "26lcAEKKxczKF3xUw4Zov0ncnpIcUpGh5ODb0QM1TyRlya0l6J"
 ACCESS_TOKEN = "1474009573111607296-p3w5voFz7mdm6sOJM2QGuY3lJUvuac"
 ACCESS_TOKEN_SECRET = "iOwVwgKeXz5QMIz41T69GFRpCOU84pdIN0DwF8RmkgLxy"
 
-# Cardano wallet details (replace with actual values)
-WALLET_ADDRESS = "your_cardano_wallet_address"
-WALLET_KEY = "your_cardano_wallet_key"
+# Cardano testnet wallet details
+WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt"
+CONTRACT_ADDRESS = "addr_test1..."  # Replace with deployed Plutus contract address
+NETWORK = Network.TESTNET  # Use testnet for development
 
 # Authenticate with X API
 auth = tweepy.OAuthHandler(API_KEY, API_SECRET)
@@ -26,46 +28,78 @@ def hash_data(data):
     return hashlib.sha256(data.encode()).hexdigest()
 
 # Function to collect tweets mentioning a keyword
-def collect_tweets(keyword, max_tweets=100):
+def collect_tweets(keyword, max_tweets=10):
     tweets_data = []
-    for tweet in tweepy.Cursor(api.search_tweets, q=keyword, lang="en", tweet_mode="extended").items(max_tweets):
-        try:
-            data = {
-                "post_id": tweet.id_str,
-                "timestamp": tweet.created_at.isoformat(),
-                "text": tweet.full_text,
-                "likes": tweet.favorite_count,
-                "reposts": tweet.retweet_count,
-                "keyword": keyword,
-                "hash": hash_data(tweet.full_text)
-            }
-            tweets_data.append(data)
-        except AttributeError:
-            continue
+    try:
+        for tweet in tweepy.Cursor(api.search_tweets, q=keyword, lang="en", tweet_mode="extended").items(max_tweets):
+            try:
+                data = {
+                    "post_id": tweet.id_str,
+                    "timestamp": tweet.created_at.isoformat(),
+                    "text": tweet.full_text,
+                    "likes": tweet.favorite_count,
+                    "reposts": tweet.retweet_count,
+                    "keyword": keyword,
+                    "hash": hash_data(tweet.full_text)
+                }
+                tweets_data.append(data)
+            except AttributeError:
+                continue
+    except tweepy.TweepError as e:
+        print(f"Error fetching tweets: {e}")
+        return []
     return tweets_data
 
-# Function to submit data to Cardano blockchain
+# Function to submit data to Cardano testnet using Yoroi
 async def submit_to_blockchain(data):
-    # Serialize data
+    if not CONTRACT_ADDRESS.startswith("addr_test1"):
+        print("Error: CONTRACT_ADDRESS not set or invalid")
+        return None
+
+    # Serialize data for Plutus contract
     data_str = json.dumps(data)
-    # Placeholder for Cardano transaction (use pycardano or cardano-cli)
-    tx = cardano_cli.transaction_build(
-        wallet_address=WALLET_ADDRESS,
-        wallet_key=WALLET_KEY,
-        data=data_str,
-        smart_contract_address="tweetbuzz_contract"  # Reference to Plutus contract
-    )
-    tx_id = cardano_cli.submit_transaction(tx)
-    return tx_id
+    plutus_data = PlutusV2Script(data_str.encode())
+
+    # Prepare transaction data
+    tx_data = {
+        "network": "testnet",
+        "address": WALLET_ADDRESS,
+        "contract_address": CONTRACT_ADDRESS,
+        "amount": 1000000,  # Minimum lovelace
+        "datum": data_str
+    }
+
+    # Save transaction data to a temporary file
+    with open("tx_data.json", "w") as f:
+        json.dump(tx_data, f)
+
+    # Call JavaScript helper to sign transaction with Yoroi
+    try:
+        result = subprocess.run(
+            ["node", "sign_transaction.js", "tx_data.json"],
+            capture_output=True, text=True, check=True
+        )
+        tx_id = result.stdout.strip()
+        return tx_id
+    except subprocess.CalledProcessError as e:
+        print(f"Error signing transaction: {e.stderr}")
+        return None
 
 # Main function
 async def main():
     keyword = "Cardano"
     while True:
         tweets = collect_tweets(keyword, max_tweets=10)
+        if not tweets:
+            print("No tweets collected, retrying in 60 seconds")
+            await asyncio.sleep(60)
+            continue
         for tweet_data in tweets:
             tx_id = await submit_to_blockchain(tweet_data)
-            print(f"Stored tweet {tweet_data['post_id']} with tx_id: {tx_id}")
+            if tx_id:
+                print(f"Stored tweet {tweet_data['post_id']} with tx_id: {tx_id}")
+            else:
+                print(f"Failed to store tweet {tweet_data['post_id']}")
         await asyncio.sleep(60)  # Wait 1 minute before next collection
 
 if __name__ == "__main__":
