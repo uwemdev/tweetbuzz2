@@ -1,0 +1,104 @@
+-- Plutus smart contract for TweetBuzz
+-- Stores tweet data and handles data purchase queries
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+
+module TweetBuzzContract where
+
+import PlutusTx
+import PlutusTx.Prelude
+import Ledger
+import Ledger.Ada as Ada
+import Ledger.Value
+import Playground.Contract
+
+-- Data structure for a tweet entry
+data TweetData = TweetData
+  { tdPostId :: !ByteString
+  , tdTimestamp :: !POSIXTime
+  , tdText :: !ByteString
+  , tdLikes :: !Integer
+  , tdReposts :: !Integer
+  , tdKeyword :: !ByteString
+  , tdHash :: !ByteString
+  }
+
+PlutusTx.makeIsDataIndexed ''TweetData [('TweetData, 0)]
+
+-- Data structure for a query request
+data QueryRequest = QueryRequest
+  { qrKeyword :: !ByteString
+  , qrStartTime :: !POSIXTime
+  , qrEndTime :: !POSIXTime
+  }
+
+PlutusTx.makeIsDataIndexed ''QueryRequest [('QueryRequest, 0)]
+
+-- Datum: List of stored tweet data
+newtype TweetBuzzDatum = TweetBuzzDatum [TweetData]
+PlutusTx.makeIsDataIndexed ''TweetBuzzDatum [('TweetBuzzDatum, 0)]
+
+-- Redeemer: Either store new data or query existing data
+data TweetBuzzRedeemer
+  = Store TweetData
+  | Query QueryRequest
+PlutusTx.makeIsDataIndexed ''TweetBuzzRedeemer [('Store, 0), ('Query, 1)]
+
+-- Contract parameters
+data TweetBuzzParams = TweetBuzzParams
+  { tbpOwner :: !PubKeyHash
+  , tbpPricePerQuery :: !Integer  -- ADA price for data access
+  }
+
+-- Validator logic
+validateTweetBuzz :: TweetBuzzParams -> TweetBuzzDatum -> TweetBuzzRedeemer -> ScriptContext -> Bool
+validateTweetBuzz params (TweetBuzzDatum tweets) redeemer ctx =
+  case redeemer of
+    Store tweetData ->
+      -- Ensure only owner can store data
+      txSignedBy (scriptContextTxInfo ctx) (tbpOwner params) &&
+      -- Validate data hash
+      tdHash tweetData == sha2_256 (tdText tweetData)
+    Query queryRequest ->
+      -- Ensure payment is made
+      valuePaidTo (scriptContextTxInfo ctx) (tbpOwner params) >= Ada.lovelaceValueOf (tbpPricePerQuery params) &&
+      -- Ensure query parameters are valid
+      qrStartTime queryRequest <= qrEndTime queryRequest
+
+-- Endpoints
+data TweetBuzz
+instance Scripts.ValidatorTypes TweetBuzz where
+  type instance RedeemerType TweetBuzz = TweetBuzzRedeemer
+  type instance DatumType TweetBuzz = TweetBuzzDatum
+
+tweetBuzzValidator :: TweetBuzzParams -> Validator
+tweetBuzzValidator params = mkValidatorScript $
+  $$(PlutusTx.compile [|| validateTweetBuzz ||])
+  `PlutusTx.applyCode`
+  PlutusTx.liftCode params
+
+-- Off-chain endpoints for storing and querying
+storeEndpoint :: TweetBuzzParams -> TweetData -> Contract () TweetBuzz Text ()
+storeEndpoint params tweetData = do
+  let lookups = Constraints.typedValidatorLookups (tweetBuzzValidator params)
+      tx = Constraints.mustPayToTheScript (TweetBuzzDatum [tweetData]) (Ada.lovelaceValueOf 1000000)
+  ledgerTx <- submitTxConstraintsWith @TweetBuzz lookups tx
+  awaitTxConfirmed (getCardanoTxId ledgerTx)
+
+queryEndpoint :: TweetBuzzParams -> QueryRequest -> Contract () TweetBuzz Text [TweetData]
+queryEndpoint params queryRequest = do
+  utxos <- utxosAt (Scripts.validatorAddress (tweetBuzzValidator params))
+  let lookups = Constraints.typedValidatorLookups (tweetBuzzValidator params)
+      tx = Constraints.mustPayToPubKey (tbpOwner params) (Ada.lovelaceValueOf (tbpPricePerQuery params))
+           <> Constraints.mustSpendScriptOutput (head $ Map.keys utxos) (Redeemer $ BuiltinData $ Query queryRequest)
+  ledgerTx <- submitTxConstraintsWith @TweetBuzz lookups tx
+  awaitTxConfirmed (getCardanoTxId ledgerTx)
+  -- Retrieve data from datum (simplified, assumes single UTxO)
+  let TweetBuzzDatum tweets = case Map.elems utxos of
+        [u] -> fromMaybe (TweetBuzzDatum []) (scriptDataFromCardanoTxOut u)
+        _ -> TweetBuzzDatum []
+  pure $ filter (\td -> tdKeyword td == qrKeyword queryRequest &&
+                       tdTimestamp td >= qrStartTime queryRequest &&
+                       tdTimestamp td <= qrEndTime queryRequest) tweets

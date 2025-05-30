@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TweetBuzz - Social Media Analytics</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@7.22.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Placeholder for Cardano wallet integration (e.g., Nami, Eternl)
+    const cardanoWallet = {
+      connect: async () => ({ address: "your_cardano_wallet_address" }),
+      signAndSubmitTx: async (tx) => ({ txId: "mock_tx_id" })
+    };
+
+    function App() {
+      const [keyword, setKeyword] = useState("Cardano");
+      const [startDate, setStartDate] = useState("");
+      const [endDate, setEndDate] = useState("");
+      const [results, setResults] = useState([]);
+      const [walletConnected, setWalletConnected] = useState(false);
+
+      const connectWallet = async () => {
+        try {
+          const wallet = await cardanoWallet.connect();
+          setWalletConnected(true);
+          alert(`Connected to wallet: ${wallet.address}`);
+        } catch (error) {
+          alert("Failed to connect wallet");
+        }
+      };
+
+      const queryData = async () => {
+        if (!walletConnected) {
+          alert("Please connect your wallet");
+          return;
+        }
+        // Convert dates to POSIX timestamps
+        const startTime = Math.floor(new Date(startDate).getTime() / 1000);
+        const endTime = Math.floor(new Date(endDate).getTime() / 1000);
+        // Placeholder for querying the smart contract
+        const queryRequest = { qrKeyword: keyword, qrStartTime: startTime, qrEndTime: endTime };
+        const tx = {
+          // Mock transaction data
+          contractAddress: "tweetbuzz_contract",
+          redeemer: { Query: queryRequest },
+          payment: { amount: 5000000, currency: "ADA" } // 5 ADA
+        };
+        const txId = await cardanoWallet.signAndSubmitTx(tx);
+        // Mock response (replace with actual chain query)
+        const mockResults = [
+          { postId: "123", timestamp: "2025-01-01T12:00:00Z", text: "Love Cardano!", likes: 10, reposts: 5, keyword: "Cardano", hash: "abc123" }
+        ];
+        setResults(mockResults);
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
+          <h1 className="text-3xl font-bold mb-6">TweetBuzz Analytics</h1>
+          <button
+            onClick={connectWallet}
+            className="mb-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            {walletConnected ? "Wallet Connected" : "Connect Cardano Wallet"}
+          </button>
+          <div className="w-full max-w-md bg-white p-6 rounded shadow">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Keyword</label>
+              <input
+                type="text"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="mt-1 p-2 w-full border rounded"
+                placeholder="e.g., Cardano"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="mt-1 p-2 w-full border rounded"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="mt-1 p-2 w-full border rounded"
+              />
+            </div>
+            <button
+              onClick={queryData}
+              className="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+            >
+              Query Data (Pay 5 ADA)
+            </button>
+          </div>
+          {results.length > 0 && (
+            <div className="mt-6 w-full max-w-2xl">
+              <h2 className="text-xl font-semibold mb-4">Results</h2>
+              <table className="w-full bg-white shadow rounded">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="p-2 text-left">Post ID</th>
+                    <th className="p-2 text-left">Timestamp</th>
+                    <th className="p-2 text-left">Text</th>
+                    <th className="p-2 text-left">Likes</th>
+                    <th className="p-2 text-left">Reposts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((result) => (
+                    <tr key={result.postId} className="border-t">
+                      <td className="p-2">{result.postId}</td>
+                      <td className="p-2">{result.timestamp}</td>
+                      <td className="p-2">{result.text}</td>
+                      <td className="p-2">{result.likes}</td>
+                      <td className="p-2">{result.reposts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
