@@ -7,10 +7,10 @@ import asyncio
 import cardano_cli  # Placeholder for Cardano wallet interaction (use pycardano or similar)
 
 # X API credentials (replace with actual keys)
-API_KEY = "your_api_key"
-API_SECRET = "your_api_secret"
-ACCESS_TOKEN = "your_access_token"
-ACCESS_TOKEN_SECRET = "your_access_token_secret"
+API_KEY = "LxIeablWHgxpCEiDUOf6g2pkG"
+API_SECRET = "26lcAEKKxczKF3xUw4Zov0ncnpIcUpGh5ODb0QM1TyRlya0l6J"
+ACCESS_TOKEN = "1474009573111607296-p3w5voFz7mdm6sOJM2QGuY3lJUvuac"
+ACCESS_TOKEN_SECRET = "iOwVwgKeXz5QMIz41T69GFRpCOU84pdIN0DwF8RmkgLxy"
 
 # Cardano wallet details (replace with actual values)
 WALLET_ADDRESS = "your_cardano_wallet_address"
