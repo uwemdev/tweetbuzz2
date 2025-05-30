@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import asyncio
 import subprocess
-from pycardano import Network, Address, TransactionBuilder, TransactionOutput, PlutusV2Script
+from pycardano import Network, Address, TransactionBuilder, TransactionOutput, Metadata
 
 # X API credentials
 API_KEY = "LxIeablWHgxpCEiDUOf6g2pkG"
@@ -15,7 +15,6 @@ ACCESS_TOKEN_SECRET = "iOwVwgKeXz5QMIz41T69GFRpCOU84pdIN0DwF8RmkgLxy"
 
 # Cardano testnet wallet details
 WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt"
-CONTRACT_ADDRESS = "addr_test1..."  # Replace with deployed Plutus contract address
 NETWORK = Network.TESTNET  # Use testnet for development
 
 # Authenticate with X API
@@ -36,7 +35,7 @@ def collect_tweets(keyword, max_tweets=10):
                 data = {
                     "post_id": tweet.id_str,
                     "timestamp": tweet.created_at.isoformat(),
-                    "text": tweet.full_text,
+                    "text": tweet.full_text[:280],  # Truncate to fit metadata limits
                     "likes": tweet.favorite_count,
                     "reposts": tweet.retweet_count,
                     "keyword": keyword,
@@ -50,23 +49,18 @@ def collect_tweets(keyword, max_tweets=10):
         return []
     return tweets_data
 
-# Function to submit data to Cardano testnet using Yoroi
+# Function to submit data to Cardano testnet as transaction metadata
 async def submit_to_blockchain(data):
-    if not CONTRACT_ADDRESS.startswith("addr_test1"):
-        print("Error: CONTRACT_ADDRESS not set or invalid")
-        return None
-
-    # Serialize data for Plutus contract
+    # Serialize data for metadata
     data_str = json.dumps(data)
-    plutus_data = PlutusV2Script(data_str.encode())
+    metadata = Metadata({674: {"tweet_data": data}})  # Metadata label 674 for custom data
 
     # Prepare transaction data
     tx_data = {
         "network": "testnet",
         "address": WALLET_ADDRESS,
-        "contract_address": CONTRACT_ADDRESS,
-        "amount": 1000000,  # Minimum lovelace
-        "datum": data_str
+        "amount": 1000000,  # Minimum lovelace (1 ADA)
+        "metadata": data
     }
 
     # Save transaction data to a temporary file
