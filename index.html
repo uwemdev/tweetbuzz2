@@ -8,16 +8,12 @@
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module">
-        // Preload CardanoWasm
-        window.CardanoWasm = await import('https://cdn.jsdelivr.net/npm/@emurgo/cardano-serialization-lib-browser/+esm');
-    </script>
 </head>
 <body class="bg-gray-100 font-sans">
     <div id="root" class="container mx-auto p-4"></div>
     <script type="text/babel">
         const WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt";
-        const BLOCKFROST_API_KEY = "your_blockfrost_api_key"; // Replace with your Blockfrost testnet API key
+        const BLOCKFROST_API_KEY = "preview80iu63gdF0gDvHcl7EWsfen1vUKHpvpO"; // Replace with your Blockfrost testnet API key
         const API_URL = "/api/tweetbuzz"; // Vercel API endpoint
 
         const TweetBuzzApp = () => {
@@ -28,6 +24,33 @@
             const [transactions, setTransactions] = React.useState([]);
             const [loading, setLoading] = React.useState(false);
             const [error, setError] = React.useState("");
+            const [walletConnected, setWalletConnected] = React.useState(false);
+            const [yoroiApi, setYoroiApi] = React.useState(null);
+
+            // Connect to Yoroi wallet
+            const connectWallet = async () => {
+                setLoading(true);
+                setError("");
+                try {
+                    if (!window.cardano || !window.cardano.yoroi) {
+                        throw new Error("Yoroi wallet not detected. Please install Yoroi extension.");
+                    }
+                    const yoroi = await window.cardano.yoroi.enable();
+                    setYoroiApi(yoroi);
+                    setWalletConnected(true);
+                } catch (err) {
+                    setError(`Wallet connection error: ${err.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Disconnect wallet
+            const disconnectWallet = () => {
+                setYoroiApi(null);
+                setWalletConnected(false);
+                setError("Wallet disconnected. Please reconnect to sign transactions.");
+            };
 
             // Fetch transactions from API
             const fetchTransactions = async () => {
@@ -48,12 +71,16 @@
             // Sign and submit transaction with Yoroi
             const signAndSubmit = async (txData) => {
                 try {
-                    if (!window.cardano || !window.cardano.yoroi) {
-                        throw new Error("Yoroi wallet not detected. Please install Yoroi extension.");
+                    if (!yoroiApi) {
+                        throw new Error("Yoroi wallet not connected. Please connect your wallet.");
                     }
-                    const yoroi = await window.cardano.yoroi.enable();
 
-                    const { CardanoWasm } = window;
+                    // Load CardanoWasm dynamically
+                    const CardanoWasm = await import('https://cdn.jsdelivr.net/npm/@emurgo/cardano-serialization-lib-browser/+esm');
+                    if (!CardanoWasm || !CardanoWasm.TransactionBuilder) {
+                        throw new Error("Failed to load Cardano serialization library.");
+                    }
+
                     const txBuilder = CardanoWasm.TransactionBuilder.new();
                     txBuilder.add_output(
                         CardanoWasm.TransactionOutput.new(
@@ -75,11 +102,11 @@
 
                     // Build and sign
                     const unsignedTx = txBuilder.build();
-                    const signedTx = await yoroi.signTx(unsignedTx.to_hex());
+                    const signedTx = await yoroiApi.signTx(unsignedTx.to_hex());
                     const txId = signedTx.tx_hash();
 
                     // Submit
-                    await yoroi.submitTx(signedTx.to_hex());
+                    await yoroiApi.submitTx(signedTx.to_hex());
                     return txId;
                 } catch (err) {
                     throw new Error(`Signing error: ${err.message}`);
@@ -144,6 +171,24 @@
             return (
                 <div className="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
                     <h1 className="text-3xl font-bold mb-4 text-center">TweetBuzz</h1>
+                    <div className="mb-4 flex gap-2">
+                        {walletConnected ? (
+                            <button
+                                onClick={disconnectWallet}
+                                className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
+                            >
+                                Disconnect Wallet
+                            </button>
+                        ) : (
+                            <button
+                                onClick={connectWallet}
+                                disabled={loading}
+                                className="w-full bg-purple-500 text-white p-2 rounded hover:bg-purple-600 disabled:bg-gray-400"
+                            >
+                                {loading ? "Connecting..." : "Connect Wallet"}
+                            </button>
+                        )}
+                    </div>
                     <div className="mb-4">
                         <button
                             onClick={fetchTransactions}
@@ -154,7 +199,7 @@
                         </button>
                         <button
                             onClick={handleSignAll}
-                            disabled={loading || transactions.length === 0}
+                            disabled={loading || transactions.length === 0 || !walletConnected}
                             className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
                         >
                             {loading ? "Signing..." : `Sign ${transactions.length} Transactions`}
