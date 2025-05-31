@@ -1,4 +1,3 @@
-import tweepy
 import hashlib
 import time
 from datetime import datetime
@@ -6,47 +5,71 @@ import json
 import asyncio
 import subprocess
 from pycardano import Network, Address, TransactionBuilder, TransactionOutput, Metadata
-
-# X API credentials
-API_KEY = "LxIeablWHgxpCEiDUOf6g2pkG"
-API_SECRET = "26lcAEKKxczKF3xUw4Zov0ncnpIcUpGh5ODb0QM1TyRlya0l6J"
-ACCESS_TOKEN = "1474009573111607296-p3w5voFz7mdm6sOJM2QGuY3lJUvuac"
-ACCESS_TOKEN_SECRET = "iOwVwgKeXz5QMIz41T69GFRpCOU84pdIN0DwF8RmkgLxy"
+import snscrape.modules.twitter as sntwitter
 
 # Cardano testnet wallet details
 WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt"
 NETWORK = Network.TESTNET  # Use testnet for development
 
-# Authenticate with X API
-auth = tweepy.OAuthHandler(API_KEY, API_SECRET)
-auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = tweepy.API(auth, wait_on_rate_limit=True)
+# Mock data for testing
+MOCK_TWEETS = [
+    {
+        "post_id": "mock123",
+        "timestamp": datetime.now().isoformat(),
+        "text": "Mock tweet about Cardano blockchain!",
+        "likes": 5,
+        "reposts": 2,
+        "keyword": "Cardano",
+        "hash": ""
+    },
+    {
+        "post_id": "mock456",
+        "timestamp": datetime.now().isoformat(),
+        "text": "Cardano is revolutionizing DeFi!",
+        "likes": 8,
+        "reposts": 3,
+        "keyword": "Cardano",
+        "hash": ""
+    }
+]
 
 # Function to hash data for integrity
 def hash_data(data):
     return hashlib.sha256(data.encode()).hexdigest()
 
 # Function to collect tweets mentioning a keyword
-def collect_tweets(keyword, max_tweets=10):
+def collect_tweets(keyword, max_tweets=10, use_mock=True):
+    if use_mock:
+        print("Using mock tweet data")
+        tweets_data = MOCK_TWEETS
+        for tweet in tweets_data:
+            tweet["timestamp"] = datetime.now().isoformat()  # Update timestamp
+            tweet["hash"] = hash_data(tweet["text"])
+        return tweets_data
+
+    # Use snscrape to collect tweets without X API
     tweets_data = []
     try:
-        for tweet in tweepy.Cursor(api.search_tweets, q=keyword, lang="en", tweet_mode="extended").items(max_tweets):
-            try:
-                data = {
-                    "post_id": tweet.id_str,
-                    "timestamp": tweet.created_at.isoformat(),
-                    "text": tweet.full_text[:280],  # Truncate to fit metadata limits
-                    "likes": tweet.favorite_count,
-                    "reposts": tweet.retweet_count,
-                    "keyword": keyword,
-                    "hash": hash_data(tweet.full_text)
-                }
-                tweets_data.append(data)
-            except AttributeError:
-                continue
-    except tweepy.TweepError as e:
-        print(f"Error fetching tweets: {e}")
-        return []
+        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(f"{keyword} lang:en").get_items()):
+            if i >= max_tweets:
+                break
+            data = {
+                "post_id": str(tweet.id),
+                "timestamp": tweet.date.isoformat(),
+                "text": tweet.content[:280],  # Truncate to fit metadata limits
+                "likes": tweet.likeCount or 0,
+                "reposts": tweet.retweetCount or 0,
+                "keyword": keyword,
+                "hash": hash_data(tweet.content)
+            }
+            tweets_data.append(data)
+    except Exception as e:
+        print(f"Error fetching tweets with snscrape: {e}")
+        # Fallback to mock data
+        tweets_data = MOCK_TWEETS
+        for tweet in tweets_data:
+            tweet["timestamp"] = datetime.now().isoformat()
+            tweet["hash"] = hash_data(tweet["text"])
     return tweets_data
 
 # Function to submit data to Cardano testnet as transaction metadata
@@ -78,12 +101,16 @@ async def submit_to_blockchain(data):
     except subprocess.CalledProcessError as e:
         print(f"Error signing transaction: {e.stderr}")
         return None
+    except FileNotFoundError:
+        print("Error: Node.js or sign_transaction.js not found")
+        return None
 
 # Main function
 async def main():
     keyword = "Cardano"
+    use_mock = True  # Set to False to try snscrape
     while True:
-        tweets = collect_tweets(keyword, max_tweets=10)
+        tweets = collect_tweets(keyword, max_tweets=10, use_mock=use_mock)
         if not tweets:
             print("No tweets collected, retrying in 60 seconds")
             await asyncio.sleep(60)

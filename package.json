@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@emurgo/cardano-serialization-lib-nodejs": "^14.1.2"
+  }
+}

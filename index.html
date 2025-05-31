@@ -1,143 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TweetBuzz - Social Media Analytics</title>
-  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@7.22.5/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TweetBuzz</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+<body class="bg-gray-100 font-sans">
+    <div id="root" class="container mx-auto p-4"></div>
+    <script type="text/babel">
+        const WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt";
+        const BLOCKFROST_API_KEY = "your_blockfrost_api_key"; // Replace with your Blockfrost testnet API key
 
-    // Placeholder for Cardano wallet integration (e.g., Nami, Eternl)
-    const cardanoWallet = {
-      connect: async () => ({ address: "your_cardano_wallet_address" }),
-      signAndSubmitTx: async (tx) => ({ txId: "mock_tx_id" })
-    };
+        const TweetBuzzApp = () => {
+            const [keyword, setKeyword] = React.useState("Cardano");
+            const [startDate, setStartDate] = React.useState("");
+            const [endDate, setEndDate] = React.useState("");
+            const [tweets, setTweets] = React.useState([]);
+            const [loading, setLoading] = React.useState(false);
+            const [error, setError] = React.useState("");
 
-    function App() {
-      const [keyword, setKeyword] = useState("Cardano");
-      const [startDate, setStartDate] = useState("");
-      const [endDate, setEndDate] = useState("");
-      const [results, setResults] = useState([]);
-      const [walletConnected, setWalletConnected] = useState(false);
+            const queryTweets = async () => {
+                setLoading(true);
+                setError("");
+                try {
+                    const response = await fetch(`https://cardano-testnet.blockfrost.io/api/v0/addresses/${WALLET_ADDRESS}/txs`, {
+                        headers: { "project_id": BLOCKFROST_API_KEY }
+                    });
+                    if (!response.ok) throw new Error("Failed to fetch transactions");
+                    const txs = await response.json();
+                    const results = [];
+                    for (const tx of txs.slice(0, 50)) { // Limit to recent 50 txs for performance
+                        const metadata = await fetch(`https://cardano-testnet.blockfrost.io/api/v0/txs/${tx.tx_hash}/metadata`, {
+                            headers: { "project_id": BLOCKFROST_API_KEY }
+                        });
+                        if (!metadata.ok) continue;
+                        const metadataJson = await metadata.json();
+                        metadataJson.forEach(m => {
+                            if (m.label === "674" && m.json_metadata.tweet_data.keyword === keyword) {
+                                results.push(m.json_metadata.tweet_data);
+                            }
+                        });
+                    }
+                    const filtered = results.filter(r => {
+                        const tweetDate = new Date(r.timestamp);
+                        return (!startDate || tweetDate >= new Date(startDate)) &&
+                               (!endDate || tweetDate <= new Date(endDate));
+                    });
+                    setTweets(filtered);
+                } catch (err) {
+                    setError(`Error: ${err.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
 
-      const connectWallet = async () => {
-        try {
-          const wallet = await cardanoWallet.connect();
-          setWalletConnected(true);
-          alert(`Connected to wallet: ${wallet.address}`);
-        } catch (error) {
-          alert("Failed to connect wallet");
-        }
-      };
-
-      const queryData = async () => {
-        if (!walletConnected) {
-          alert("Please connect your wallet");
-          return;
-        }
-        // Convert dates to POSIX timestamps
-        const startTime = Math.floor(new Date(startDate).getTime() / 1000);
-        const endTime = Math.floor(new Date(endDate).getTime() / 1000);
-        // Placeholder for querying the smart contract
-        const queryRequest = { qrKeyword: keyword, qrStartTime: startTime, qrEndTime: endTime };
-        const tx = {
-          // Mock transaction data
-          contractAddress: "tweetbuzz_contract",
-          redeemer: { Query: queryRequest },
-          payment: { amount: 5000000, currency: "ADA" } // 5 ADA
+            return (
+                <div className="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+                    <h1 className="text-3xl font-bold mb-4 text-center">TweetBuzz</h1>
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1">Keyword</label>
+                        <input
+                            type="text"
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
+                            className="w-full p-2 border rounded"
+                            placeholder="e.g., Cardano"
+                        />
+                    </div>
+                    <div className="mb-4 flex gap-4">
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium mb-1">Start Date</label>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="w-full p-2 border rounded"
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium mb-1">End Date</label>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="w-full p-2 border rounded"
+                            />
+                        </div>
+                    </div>
+                    <button
+                        onClick={queryTweets}
+                        disabled={loading}
+                        className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+                    >
+                        {loading ? "Loading..." : "Search Tweets"}
+                    </button>
+                    {error && <p className="mt-4 text-red-500">{error}</p>}
+                    <div className="mt-6">
+                        {tweets.length === 0 && !loading && <p>No tweets found.</p>}
+                        {tweets.map(tweet => (
+                            <div key={tweet.post_id} className="p-4 mb-4 bg-gray-50 rounded border">
+                                <p><strong>ID:</strong> {tweet.post_id}</p>
+                                <p><strong>Text:</strong> {tweet.text}</p>
+                                <p><strong>Likes:</strong> {tweet.likes}</p>
+                                <p><strong>Reposts:</strong> {tweet.reposts}</p>
+                                <p><strong>Timestamp:</strong> {tweet.timestamp}</p>
+                                <p><strong>Hash:</strong> {tweet.hash}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
         };
-        const txId = await cardanoWallet.signAndSubmitTx(tx);
-        // Mock response (replace with actual chain query)
-        const mockResults = [
-          { postId: "123", timestamp: "2025-01-01T12:00:00Z", text: "Love Cardano!", likes: 10, reposts: 5, keyword: "Cardano", hash: "abc123" }
-        ];
-        setResults(mockResults);
-      };
 
-      return (
-        <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
-          <h1 className="text-3xl font-bold mb-6">TweetBuzz Analytics</h1>
-          <button
-            onClick={connectWallet}
-            className="mb-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            {walletConnected ? "Wallet Connected" : "Connect Cardano Wallet"}
-          </button>
-          <div className="w-full max-w-md bg-white p-6 rounded shadow">
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700">Keyword</label>
-              <input
-                type="text"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                className="mt-1 p-2 w-full border rounded"
-                placeholder="e.g., Cardano"
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700">Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="mt-1 p-2 w-full border rounded"
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700">End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="mt-1 p-2 w-full border rounded"
-              />
-            </div>
-            <button
-              onClick={queryData}
-              className="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-            >
-              Query Data (Pay 5 ADA)
-            </button>
-          </div>
-          {results.length > 0 && (
-            <div className="mt-6 w-full max-w-2xl">
-              <h2 className="text-xl font-semibold mb-4">Results</h2>
-              <table className="w-full bg-white shadow rounded">
-                <thead>
-                  <tr className="bg-gray-200">
-                    <th className="p-2 text-left">Post ID</th>
-                    <th className="p-2 text-left">Timestamp</th>
-                    <th className="p-2 text-left">Text</th>
-                    <th className="p-2 text-left">Likes</th>
-                    <th className="p-2 text-left">Reposts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((result) => (
-                    <tr key={result.postId} className="border-t">
-                      <td className="p-2">{result.postId}</td>
-                      <td className="p-2">{result.timestamp}</td>
-                      <td className="p-2">{result.text}</td>
-                      <td className="p-2">{result.likes}</td>
-                      <td className="p-2">{result.reposts}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    ReactDOM.render(<App />, document.getElementById("root"));
-  </script>
+        ReactDOM.render(<TweetBuzzApp />, document.getElementById('root'));
+    </script>
 </body>
 </html>
