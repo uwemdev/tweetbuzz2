@@ -8,21 +8,85 @@
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        // Preload CardanoWasm
+        window.CardanoWasm = await import('https://cdn.jsdelivr.net/npm/@emurgo/cardano-serialization-lib-browser/+esm');
+    </script>
 </head>
 <body class="bg-gray-100 font-sans">
     <div id="root" class="container mx-auto p-4"></div>
     <script type="text/babel">
         const WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt";
-        const BLOCKFROST_API_KEY = "preview80iu63gdF0gDvHcl7EWsfen1vUKHpvpO"; // Replace with your Blockfrost testnet API key
+        const BLOCKFROST_API_KEY = "your_blockfrost_api_key"; // Replace with your Blockfrost testnet API key
+        const API_URL = "/api/tweetbuzz"; // Vercel API endpoint
 
         const TweetBuzzApp = () => {
             const [keyword, setKeyword] = React.useState("Cardano");
             const [startDate, setStartDate] = React.useState("");
             const [endDate, setEndDate] = React.useState("");
             const [tweets, setTweets] = React.useState([]);
+            const [transactions, setTransactions] = React.useState([]);
             const [loading, setLoading] = React.useState(false);
             const [error, setError] = React.useState("");
 
+            // Fetch transactions from API
+            const fetchTransactions = async () => {
+                setLoading(true);
+                setError("");
+                try {
+                    const response = await fetch(API_URL);
+                    if (!response.ok) throw new Error("Failed to fetch transactions");
+                    const data = await response.json();
+                    setTransactions(data.transactions || []);
+                } catch (err) {
+                    setError(`Error: ${err.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Sign and submit transaction with Yoroi
+            const signAndSubmit = async (txData) => {
+                try {
+                    if (!window.cardano || !window.cardano.yoroi) {
+                        throw new Error("Yoroi wallet not detected. Please install Yoroi extension.");
+                    }
+                    const yoroi = await window.cardano.yoroi.enable();
+
+                    const { CardanoWasm } = window;
+                    const txBuilder = CardanoWasm.TransactionBuilder.new();
+                    txBuilder.add_output(
+                        CardanoWasm.TransactionOutput.new(
+                            CardanoWasm.Address.from_bech32(txData.address),
+                            CardanoWasm.Value.new(CardanoWasm.BigNum.from_str(txData.amount.toString()))
+                        )
+                    );
+
+                    // Add metadata
+                    const metadata = CardanoWasm.GeneralTransactionMetadata.new();
+                    metadata.insert(
+                        CardanoWasm.BigNum.from_str('674'),
+                        CardanoWasm.encode_json_str_to_metadatum(JSON.stringify(txData.metadata), 0)
+                    );
+                    txBuilder.set_metadata(metadata);
+
+                    // Set change address
+                    txBuilder.set_change_address(CardanoWasm.Address.from_bech32(txData.address));
+
+                    // Build and sign
+                    const unsignedTx = txBuilder.build();
+                    const signedTx = await yoroi.signTx(unsignedTx.to_hex());
+                    const txId = signedTx.tx_hash();
+
+                    // Submit
+                    await yoroi.submitTx(signedTx.to_hex());
+                    return txId;
+                } catch (err) {
+                    throw new Error(`Signing error: ${err.message}`);
+                }
+            };
+
+            // Query stored tweets
             const queryTweets = async () => {
                 setLoading(true);
                 setError("");
@@ -33,7 +97,7 @@
                     if (!response.ok) throw new Error("Failed to fetch transactions");
                     const txs = await response.json();
                     const results = [];
-                    for (const tx of txs.slice(0, 50)) { // Limit to recent 50 txs for performance
+                    for (const tx of txs.slice(0, 50)) {
                         const metadata = await fetch(`https://cardano-testnet.blockfrost.io/api/v0/txs/${tx.tx_hash}/metadata`, {
                             headers: { "project_id": BLOCKFROST_API_KEY }
                         });
@@ -58,9 +122,44 @@
                 }
             };
 
+            // Handle signing all transactions
+            const handleSignAll = async () => {
+                setLoading(true);
+                setError("");
+                try {
+                    const txIds = [];
+                    for (const txData of transactions) {
+                        const txId = await signAndSubmit(txData);
+                        txIds.push(txId);
+                    }
+                    setError(`Signed ${txIds.length} transactions: ${txIds.join(', ')}`);
+                    await queryTweets(); // Refresh tweets
+                } catch (err) {
+                    setError(`Error: ${err.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
             return (
                 <div className="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
                     <h1 className="text-3xl font-bold mb-4 text-center">TweetBuzz</h1>
+                    <div className="mb-4">
+                        <button
+                            onClick={fetchTransactions}
+                            disabled={loading}
+                            className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600 disabled:bg-gray-400 mb-2"
+                        >
+                            {loading ? "Loading..." : "Fetch Transactions"}
+                        </button>
+                        <button
+                            onClick={handleSignAll}
+                            disabled={loading || transactions.length === 0}
+                            className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+                        >
+                            {loading ? "Signing..." : `Sign ${transactions.length} Transactions`}
+                        </button>
+                    </div>
                     <div className="mb-4">
                         <label className="block text-sm font-medium mb-1">Keyword</label>
                         <input

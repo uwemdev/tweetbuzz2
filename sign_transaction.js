@@ -10,7 +10,7 @@ async function signTransaction(txDataPath) {
 
         // Launch browser with Puppeteer
         browser = await puppeteer.launch({
-            headless: false, // Keep visible for Yoroi interaction
+            headless: false,
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         const page = await browser.newPage();
