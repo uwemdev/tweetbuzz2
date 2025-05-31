@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "@emurgo/cardano-serialization-lib-nodejs": "^14.1.2"
+    "@emurgo/cardano-serialization-lib-nodejs": "^14.1.2",
+    "puppeteer": "^24.9.0"
   }
 }

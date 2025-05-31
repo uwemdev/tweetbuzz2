@@ -5,7 +5,12 @@ import json
 import asyncio
 import subprocess
 from pycardano import Network, Address, TransactionBuilder, TransactionOutput, Metadata
-import snscrape.modules.twitter as sntwitter
+
+# Optional: twscrape for tweet collection
+try:
+    from twscrape import API
+except ImportError:
+    API = None
 
 # Cardano testnet wallet details
 WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt"
@@ -38,8 +43,8 @@ def hash_data(data):
     return hashlib.sha256(data.encode()).hexdigest()
 
 # Function to collect tweets mentioning a keyword
-def collect_tweets(keyword, max_tweets=10, use_mock=True):
-    if use_mock:
+async def collect_tweets(keyword, max_tweets=10, use_mock=True, use_twscrape=False):
+    if use_mock or (use_twscrape and API is None):
         print("Using mock tweet data")
         tweets_data = MOCK_TWEETS
         for tweet in tweets_data:
@@ -47,30 +52,34 @@ def collect_tweets(keyword, max_tweets=10, use_mock=True):
             tweet["hash"] = hash_data(tweet["text"])
         return tweets_data
 
-    # Use snscrape to collect tweets without X API
-    tweets_data = []
-    try:
-        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(f"{keyword} lang:en").get_items()):
-            if i >= max_tweets:
-                break
-            data = {
-                "post_id": str(tweet.id),
-                "timestamp": tweet.date.isoformat(),
-                "text": tweet.content[:280],  # Truncate to fit metadata limits
-                "likes": tweet.likeCount or 0,
-                "reposts": tweet.retweetCount or 0,
-                "keyword": keyword,
-                "hash": hash_data(tweet.content)
-            }
-            tweets_data.append(data)
-    except Exception as e:
-        print(f"Error fetching tweets with snscrape: {e}")
-        # Fallback to mock data
-        tweets_data = MOCK_TWEETS
-        for tweet in tweets_data:
-            tweet["timestamp"] = datetime.now().isoformat()
-            tweet["hash"] = hash_data(tweet["text"])
-    return tweets_data
+    if use_twscrape:
+        tweets_data = []
+        try:
+            api = API()
+            await api.pool.add_account("username", "password", "email", "email_password")  # Replace with X credentials
+            await api.pool.login_all()
+            async for tweet in api.search(keyword + " lang:en", limit=max_tweets):
+                data = {
+                    "post_id": str(tweet.id),
+                    "timestamp": tweet.date.isoformat(),
+                    "text": tweet.rawContent[:280],  # Truncate to fit metadata limits
+                    "likes": tweet.likeCount or 0,
+                    "reposts": tweet.retweetCount or 0,
+                    "keyword": keyword,
+                    "hash": hash_data(tweet.rawContent)
+                }
+                tweets_data.append(data)
+            await api.pool.close()
+        except Exception as e:
+            print(f"Error fetching tweets with twscrape: {e}")
+            # Fallback to mock data
+            tweets_data = MOCK_TWEETS
+            for tweet in tweets_data:
+                tweet["timestamp"] = datetime.now().isoformat()
+                tweet["hash"] = hash_data(tweet["text"])
+        return tweets_data
+
+    return []  # No data if no method selected
 
 # Function to submit data to Cardano testnet as transaction metadata
 async def submit_to_blockchain(data):
@@ -87,8 +96,12 @@ async def submit_to_blockchain(data):
     }
 
     # Save transaction data to a temporary file
-    with open("tx_data.json", "w") as f:
-        json.dump(tx_data, f)
+    try:
+        with open("tx_data.json", "w") as f:
+            json.dump(tx_data, f)
+    except Exception as e:
+        print(f"Error writing tx_data.json: {e}")
+        return None
 
     # Call JavaScript helper to sign transaction with Yoroi
     try:
@@ -108,9 +121,10 @@ async def submit_to_blockchain(data):
 # Main function
 async def main():
     keyword = "Cardano"
-    use_mock = True  # Set to False to try snscrape
+    use_mock = True  # Set to False to try twscrape
+    use_twscrape = False  # Set to True to use twscrape (requires setup)
     while True:
-        tweets = collect_tweets(keyword, max_tweets=10, use_mock=use_mock)
+        tweets = await collect_tweets(keyword, max_tweets=10, use_mock=use_mock, use_twscrape=use_twscrape)
         if not tweets:
             print("No tweets collected, retrying in 60 seconds")
             await asyncio.sleep(60)
