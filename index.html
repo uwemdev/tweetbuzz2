@@ -17,7 +17,7 @@
     </script>
     <script>
         const WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt";
-        const BLOCKFROST_API_KEY = "preview80iu63gdF0gDvHcl7EWsfen1vUKHpvpO";
+        const BLOCKFROST_API_KEY = process.env.BLOCKFROST_API_KEY || "preview80iu63gdF0gDvHcl7EWsfen1vUKHpvpO";
         const API_URL = "/api/tweetbuzz";
 
         function TweetBuzzApp() {
@@ -31,17 +31,33 @@
             const [walletConnected, setWalletConnected] = React.useState(false);
             const [yoroiApi, setYoroiApi] = React.useState(null);
 
+            const waitForYoroi = async (retries = 5, delay = 500) => {
+                for (let i = 0; i < retries; i++) {
+                    if (window.cardano && window.cardano.yoroi) {
+                        console.log("Yoroi detected on attempt", i + 1);
+                        return window.cardano.yoroi;
+                    }
+                    console.log("Yoroi not detected, retrying...", i + 1);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+                throw new Error("Yoroi wallet not detected after retries. Ensure Yoroi extension is installed and enabled.");
+            };
+
             const connectWallet = async () => {
                 setLoading(true);
                 setError("");
                 try {
-                    if (!window.cardano || !window.cardano.yoroi) {
-                        throw new Error("Yoroi wallet not detected. Please install Yoroi extension.");
+                    console.log("Attempting to connect Yoroi wallet...");
+                    const yoroi = await waitForYoroi();
+                    console.log("Yoroi object:", yoroi);
+                    const api = await yoroi.enable();
+                    if (!api) {
+                        throw new Error("Failed to enable Yoroi wallet. Ensure it is unlocked and set to Preview network.");
                     }
-                    const yoroi = await window.cardano.yoroi.enable();
-                    setYoroiApi(yoroi);
+                    setYoroiApi(api);
                     setWalletConnected(true);
-                    console.log("Wallet connected");
+                    console.log("Wallet connected successfully:", api);
+                    setError("Wallet connected successfully.");
                 } catch (err) {
                     setError("Wallet connection error: " + err.message);
                     console.error("Wallet connection error:", err);
