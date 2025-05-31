@@ -1,0 +1,69 @@
+/* Generated with: npx tailwindcss -i input.css -o styles.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Extracted from index.html */
+body {
+    @apply bg-gray-100 font-sans;
+}
+.container {
+    @apply mx-auto p-4;
+}
+.max-w-3xl {
+    @apply max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md;
+}
+.text-3xl {
+    @apply text-3xl font-bold mb-4 text-center;
+}
+.mb-4 {
+    @apply mb-4;
+}
+.flex {
+    @apply flex gap-2;
+}
+.w-full {
+    @apply w-full;
+}
+.bg-red-500 {
+    @apply bg-red-500 text-white p-2 rounded hover:bg-red-600;
+}
+.bg-purple-500 {
+    @apply bg-purple-500 text-white p-2 rounded hover:bg-purple-600;
+}
+.bg-green-500 {
+    @apply bg-green-500 text-white p-2 rounded hover:bg-green-600;
+}
+.bg-blue-500 {
+    @apply bg-blue-500 text-white p-2 rounded hover:bg-blue-600;
+}
+.disabled\:bg-gray-400:disabled {
+    @apply bg-gray-400;
+}
+.mb-2 {
+    @apply mb-2;
+}
+.text-sm {
+    @apply text-sm font-medium mb-1;
+}
+.border {
+    @apply border rounded;
+}
+.p-2 {
+    @apply p-2;
+}
+.gap-4 {
+    @apply gap-4;
+}
+.flex-1 {
+    @apply flex-1;
+}
+.mt-4 {
+    @apply mt-4 text-red-500;
+}
+.mt-6 {
+    @apply mt-6;
+}
+.p-4 {
+    @apply p-4 mb-4 bg-gray-50 rounded border;
+}

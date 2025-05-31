@@ -4,19 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TweetBuzz</title>
+    <link rel="stylesheet" href="/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 font-sans">
     <div id="root" class="container mx-auto p-4"></div>
-    <script type="text/babel">
+    <script type="module">
+        import CardanoWasm from 'https://cdn.jsdelivr.net/npm/@emurgo/cardano-serialization-lib-browser@12.0.0/+esm';
+        window.CardanoWasm = CardanoWasm;
+        console.log("CardanoWasm loaded:", !!CardanoWasm.TransactionBuilder);
+    </script>
+    <script>
         const WALLET_ADDRESS = "addr_test1qqsg5dt72efhxc96mly92ttvcxwzx2wjnxxpurcccrrn87szcqjeqcrn8u3xdmdrzuyax6r969d5zjm0uxnxacmmlwqs6j3ppt";
-        const BLOCKFROST_API_KEY = "preview80iu63gdF0gDvHcl7EWsfen1vUKHpvpO"; // Your provided key
+        const BLOCKFROST_API_KEY = "preview80iu63gdF0gDvHcl7EWsfen1vUKHpvpO";
         const API_URL = "/api/tweetbuzz";
 
-        const TweetBuzzApp = () => {
+        function TweetBuzzApp() {
             const [keyword, setKeyword] = React.useState("Cardano");
             const [startDate, setStartDate] = React.useState("");
             const [endDate, setEndDate] = React.useState("");
@@ -27,19 +31,6 @@
             const [walletConnected, setWalletConnected] = React.useState(false);
             const [yoroiApi, setYoroiApi] = React.useState(null);
 
-            // Load CardanoWasm
-            const loadCardanoWasm = async () => {
-                try {
-                    const module = await import('https://cdn.jsdelivr.net/npm/@emurgo/cardano-serialization-lib-browser@12.0.0/+esm');
-                    console.log("CardanoWasm loaded:", !!module.TransactionBuilder);
-                    return module;
-                } catch (err) {
-                    console.error("Failed to load CardanoWasm:", err);
-                    throw new Error("Failed to load Cardano serialization library");
-                }
-            };
-
-            // Connect to Yoroi wallet
             const connectWallet = async () => {
                 setLoading(true);
                 setError("");
@@ -52,14 +43,13 @@
                     setWalletConnected(true);
                     console.log("Wallet connected");
                 } catch (err) {
-                    setError(`Wallet connection error: ${err.message}`);
+                    setError("Wallet connection error: " + err.message);
                     console.error("Wallet connection error:", err);
                 } finally {
                     setLoading(false);
                 }
             };
 
-            // Disconnect wallet
             const disconnectWallet = () => {
                 setYoroiApi(null);
                 setWalletConnected(false);
@@ -67,7 +57,6 @@
                 console.log("Wallet disconnected");
             };
 
-            // Fetch transactions from API
             const fetchTransactions = async () => {
                 setLoading(true);
                 setError("");
@@ -82,20 +71,22 @@
                     console.log("Transactions fetched:", data.transactions);
                     setTransactions(data.transactions || []);
                 } catch (err) {
-                    setError(`Fetch error: ${err.message}`);
+                    setError("Fetch error: " + err.message);
                     console.error("Fetch error:", err);
                 } finally {
                     setLoading(false);
                 }
             };
 
-            // Sign and submit transaction
             const signAndSubmit = async (txData) => {
                 try {
                     if (!yoroiApi) {
                         throw new Error("Yoroi wallet not connected.");
                     }
-                    const CardanoWasm = await loadCardanoWasm();
+                    const CardanoWasm = window.CardanoWasm;
+                    if (!CardanoWasm || !CardanoWasm.TransactionBuilder) {
+                        throw new Error("Cardano serialization library not loaded.");
+                    }
                     const txBuilder = CardanoWasm.TransactionBuilder.new();
                     txBuilder.add_output(
                         CardanoWasm.TransactionOutput.new(
@@ -119,11 +110,10 @@
                     return txId;
                 } catch (err) {
                     console.error("Signing error:", err);
-                    throw new Error(`Signing error: ${err.message}`);
+                    throw new Error("Signing error: " + err.message);
                 }
             };
 
-            // Query stored tweets
             const queryTweets = async () => {
                 setLoading(true);
                 setError("");
@@ -159,14 +149,13 @@
                     console.log("Filtered tweets:", filtered.length);
                     setTweets(filtered);
                 } catch (err) {
-                    setError(`Query error: ${err.message}`);
+                    setError("Query error: " + err.message);
                     console.error("Query error:", err);
                 } finally {
                     setLoading(false);
                 }
             };
 
-            // Sign all transactions
             const handleSignAll = async () => {
                 setLoading(true);
                 setError("");
@@ -179,106 +168,130 @@
                     setError(`Signed ${txIds.length} transactions: ${txIds.join(', ')}`);
                     await queryTweets();
                 } catch (err) {
-                    setError(`Error: ${err.message}`);
+                    setError("Error: " + err.message);
                     console.error("Sign all error:", err);
                 } finally {
                     setLoading(false);
                 }
             };
 
-            return (
-                <div className="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
-                    <h1 className="text-3xl font-bold mb-4 text-center">TweetBuzz</h1>
-                    <div className="mb-4 flex gap-2">
-                        {walletConnected ? (
-                            <button
-                                onClick={disconnectWallet}
-                                className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
-                            >
-                                Disconnect Wallet
-                            </button>
-                        ) : (
-                            <button
-                                onClick={connectWallet}
-                                disabled={loading}
-                                className="w-full bg-purple-500 text-white p-2 rounded hover:bg-purple-600 disabled:bg-gray-400"
-                            >
-                                {loading ? "Connecting..." : "Connect Wallet"}
-                            </button>
-                        )}
-                    </div>
-                    <div className="mb-4">
-                        <button
-                            onClick={fetchTransactions}
-                            disabled={loading}
-                            className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600 disabled:bg-gray-400 mb-2"
-                        >
-                            {loading ? "Loading..." : "Fetch Transactions"}
-                        </button>
-                        <button
-                            onClick={handleSignAll}
-                            disabled={loading || transactions.length === 0 || !walletConnected}
-                            className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
-                        >
-                            {loading ? "Signing..." : `Sign ${transactions.length} Transactions`}
-                        </button>
-                    </div>
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium mb-1">Keyword</label>
-                        <input
-                            type="text"
-                            value={keyword}
-                            onChange={(e) => setKeyword(e.target.value)}
-                            className="w-full p-2 border rounded"
-                            placeholder="e.g., Cardano"
-                        />
-                    </div>
-                    <div className="mb-4 flex gap-4">
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium mb-1">Start Date</label>
-                            <input
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="w-full p-2 border rounded"
-                            />
-                        </div>
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium mb-1">End Date</label>
-                            <input
-                                type="date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="w-full p-2 border rounded"
-                            />
-                        </div>
-                    </div>
-                    <button
-                        onClick={queryTweets}
-                        disabled={loading}
-                        className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
-                    >
-                        {loading ? "Loading..." : "Search Tweets"}
-                    </button>
-                    {error && <p className="mt-4 text-red-500">{error}</p>}
-                    <div className="mt-6">
-                        {tweets.length === 0 && !loading && <p>No tweets found.</p>}
-                        {tweets.map(tweet => (
-                            <div key={tweet.post_id} className="p-4 mb-4 bg-gray-50 rounded border">
-                                <p><strong>ID:</strong> {tweet.post_id}</p>
-                                <p><strong>Text:</strong> {tweet.text}</p>
-                                <p><strong>Likes:</strong> {tweet.likes}</p>
-                                <p><strong>Reposts:</strong> {tweet.reposts}</p>
-                                <p><strong>Timestamp:</strong> {tweet.timestamp}</p>
-                                <p><strong>Hash:</strong> {tweet.hash}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+            return React.createElement(
+                'div',
+                { className: 'max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md' },
+                React.createElement('h1', { className: 'text-3xl font-bold mb-4 text-center' }, 'TweetBuzz'),
+                React.createElement(
+                    'div',
+                    { className: 'mb-4 flex gap-2' },
+                    walletConnected
+                        ? React.createElement(
+                              'button',
+                              {
+                                  onClick: disconnectWallet,
+                                  className: 'w-full bg-red-500 text-white p-2 rounded hover:bg-red-600'
+                              },
+                              'Disconnect Wallet'
+                          )
+                        : React.createElement(
+                              'button',
+                              {
+                                  onClick: connectWallet,
+                                  disabled: loading,
+                                  className: 'w-full bg-purple-500 text-white p-2 rounded hover:bg-purple-600 disabled:bg-gray-400'
+                              },
+                              loading ? 'Connecting...' : 'Connect Wallet'
+                          )
+                ),
+                React.createElement(
+                    'div',
+                    { className: 'mb-4' },
+                    React.createElement(
+                        'button',
+                        {
+                            onClick: fetchTransactions,
+                            disabled: loading,
+                            className: 'w-full bg-green-500 text-white p-2 rounded hover:bg-green-600 disabled:bg-gray-400 mb-2'
+                        },
+                        loading ? 'Loading...' : 'Fetch Transactions'
+                    ),
+                    React.createElement(
+                        'button',
+                        {
+                            onClick: handleSignAll,
+                            disabled: loading || transactions.length === 0 || !walletConnected,
+                            className: 'w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400'
+                        },
+                        loading ? 'Signing...' : `Sign ${transactions.length} Transactions`
+                    )
+                ),
+                React.createElement(
+                    'div',
+                    { className: 'mb-4' },
+                    React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Keyword'),
+                    React.createElement('input', {
+                        type: 'text',
+                        value: keyword,
+                        onChange: e => setKeyword(e.target.value),
+                        className: 'w-full p-2 border rounded',
+                        placeholder: 'e.g., Cardano'
+                    })
+                ),
+                React.createElement(
+                    'div',
+                    { className: 'mb-4 flex gap-4' },
+                    React.createElement(
+                        'div',
+                        { className: 'flex-1' },
+                        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Start Date'),
+                        React.createElement('input', {
+                            type: 'date',
+                            value: startDate,
+                            onChange: e => setStartDate(e.target.value),
+                            className: 'w-full p-2 border rounded'
+                        })
+                    ),
+                    React.createElement(
+                        'div',
+                        { className: 'flex-1' },
+                        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'End Date'),
+                        React.createElement('input', {
+                            type: 'date',
+                            value: endDate,
+                            onChange: e => setEndDate(e.target.value),
+                            className: 'w-full p-2 border rounded'
+                        })
+                    )
+                ),
+                React.createElement(
+                    'button',
+                    {
+                        onClick: queryTweets,
+                        disabled: loading,
+                        className: 'w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400'
+                    },
+                    loading ? 'Loading...' : 'Search Tweets'
+                ),
+                error && React.createElement('p', { className: 'mt-4 text-red-500' }, error),
+                React.createElement(
+                    'div',
+                    { className: 'mt-6' },
+                    tweets.length === 0 && !loading && React.createElement('p', null, 'No tweets found.'),
+                    tweets.map(tweet =>
+                        React.createElement(
+                            'div',
+                            { key: tweet.post_id, className: 'p-4 mb-4 bg-gray-50 rounded border' },
+                            React.createElement('p', null, React.createElement('strong', null, 'ID:'), ' ', tweet.post_id),
+                            React.createElement('p', null, React.createElement('strong', null, 'Text:'), ' ', tweet.text),
+                            React.createElement('p', null, React.createElement('strong', null, 'Likes:'), ' ', tweet.likes),
+                            React.createElement('p', null, React.createElement('strong', null, 'Reposts:'), ' ', tweet.reposts),
+                            React.createElement('p', null, React.createElement('strong', null, 'Timestamp:'), ' ', tweet.timestamp),
+                            React.createElement('p', null, React.createElement('strong', null, 'Hash:'), ' ', tweet.hash)
+                        )
+                    )
+                )
             );
-        };
+        }
 
-        ReactDOM.render(<TweetBuzzApp />, document.getElementById('root'));
+        ReactDOM.render(React.createElement(TweetBuzzApp), document.getElementById('root'));
     </script>
 </body>
 </html>
